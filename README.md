@@ -25,7 +25,7 @@
     <br />
     <a href="https://playcover.github.io/PlayBook">Documentation</a>
     ·
-    <a href="https://discord.gg/rMv5qxGTGC">Discord</a>
+    <a href="https://discord.gg/RNCHsQHr3S">Discord</a>
     ·
     <a href="https://playcover.io/">Website</a>
   </p>
@@ -65,6 +65,12 @@ At the moment, PlayCover can only run on Apple Silicon Macs. Devices with the fo
 * M1 Max
 * M1 Ultra
 * M2
+* M2 Pro
+* M2 Max
+* M2 Ultra
+* M3
+* M3 Pro
+* M3 Max
 
 If you have an Intel Mac, you can explore alternatives like Bootcamp or emulators.
 
@@ -117,7 +123,7 @@ These open source libraries were used to create this project.
 * [PTFakeTouch](https://github.com/Ret70/PTFakeTouch)
 * [DownloadManager](https://github.com/shapedbyiris/download-manager)
 * [DataCache](https://github.com/huynguyencong/DataCache)
-* [SwiftUI CachedAsyncImage](https://github.com/lorenzofiamingo/swiftui-cached-async-image)
+* [SwiftUI CachedAsyncImage](https://github.com/bullinnyc/CachedAsyncImage)
 
 * Thanks to @iVoider for creating such a great project!
 

@@ -35,6 +35,15 @@ class Installer {
         return response == .alertFirstButtonReturn
     }
 
+    static private func returnErrorString(error: Error) -> String {
+        switch error.localizedDescription {
+        case let str where str.contains("(disk full?)"): NSLocalizedString("alert.notSpace", comment: "")
+        case let str where str.contains(".html"): NSLocalizedString("alert.quota.limit", comment: "")
+        case let str where str.contains(".ipa"): NSLocalizedString("alert.corrupted", comment: "")
+        default: NSLocalizedString(error.localizedDescription, comment: "")
+        }
+    }
+
     // swiftlint:disable:next function_body_length
     static func install(ipaUrl: URL, export: Bool, returnCompletion: @escaping (URL?) -> Void) {
         // If (the option key is held or the install playtools popup settings is true) and its not an export,
@@ -42,7 +51,8 @@ class Installer {
         let installPlayTools: Bool
         let applicationType = InstallPreferences.shared.defaultAppType
 
-        if (Installer.isOptionKeyHeld || InstallPreferences.shared.showInstallPopup) && !export {
+        if (ModifierKeyObserver.shared.isOptionKeyPressed
+                || InstallPreferences.shared.showInstallPopup) && !export {
             installPlayTools = installPlayToolsPopup()
         } else {
             installPlayTools = InstallPreferences.shared.alwaysInstallPlayTools
@@ -58,6 +68,12 @@ class Installer {
                 try ipa.allocateTempDir()
 
                 let app = try ipa.unzip()
+                if await ipa.checkOfficialMacOS(app: IPA.Application.base(app)) {
+                    ipa.releaseTempDir()
+                    InstallVM.shared.next(.failed, 0.95, 1.0)
+                    returnCompletion(nil)
+                    return
+                }
                 InstallVM.shared.next(.library, 0.5, 0.55)
                 try saveEntitlements(app)
                 let machos = resolveValidMachOs(app)
@@ -79,7 +95,7 @@ class Installer {
                 if export {
                     try PlayTools.injectInIPA(app.executable, payload: app.url)
                 } else if installPlayTools {
-                    try PlayTools.installInIPA(app.executable)
+                    try await PlayTools.installInIPA(app.executable)
                 }
 
                 app.info.applicationCategoryType = applicationType
@@ -107,11 +123,11 @@ class Installer {
                 }
 
                 ipa.releaseTempDir()
+                try ipa.removeQuarantine(finalURL)
                 InstallVM.shared.next(.finish, 0.95, 1.0)
                 returnCompletion(finalURL)
             } catch {
-                Log.shared.error(error)
-
+                Log.shared.error(returnErrorString(error: error))
                 ipa.releaseTempDir()
 
                 InstallVM.shared.next(.failed, 0.95, 1.0)
@@ -216,9 +232,5 @@ class Installer {
 
         try FileManager.default.moveItem(at: baseApp.url, to: location)
         return location
-    }
-
-    static var isOptionKeyHeld: Bool {
-        NSEvent.modifierFlags.contains(.option)
     }
 }
