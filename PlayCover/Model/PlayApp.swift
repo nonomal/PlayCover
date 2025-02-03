@@ -36,10 +36,10 @@ class PlayApp: BaseApp {
         do {
             isStarting = true
             if prohibitedToPlay {
-                clearAllCache()
+                await clearAllCache()
                 throw PlayCoverError.appProhibited
             } else if maliciousProhibited {
-                clearAllCache()
+                await clearAllCache()
                 deleteApp()
                 throw PlayCoverError.appMaliciousProhibited
             }
@@ -49,6 +49,10 @@ class PlayApp: BaseApp {
 
             if try !Entitlements.areEntitlementsValid(app: self) {
                 sign()
+            }
+
+            if try !isInfoPlistSigned() {
+                try Shell.signApp(executable)
             }
 
             // call unlockKeyCover() and WAIT for it to finish
@@ -63,8 +67,6 @@ class PlayApp: BaseApp {
                 Log.shared.error("PlayTools are not installed! Please move PlayCover.app into Applications!")
             } else if try !Macho.isMachoValidArch(executable) {
                 Log.shared.error("The app threw an error during conversion.")
-            } else if try !isCodesigned() {
-                Log.shared.error("The app is not codesigned! Please open Xcode and accept license agreement.")
             } else {
                 if settings.openWithLLDB {
                     try Shell.lldb(executable, withTerminalWindow: settings.openLLDBWithTerminal)
@@ -192,11 +194,9 @@ class PlayApp: BaseApp {
             .appendingPathComponent("Applications")
             .appendingPathComponent("PlayCover")
 
-    static let playChainDirectory = PlayTools.playCoverContainer.appendingPathComponent("PlayChain")
-
     lazy var aliasURL = PlayApp.aliasDirectory.appendingPathComponent(name).appendingPathExtension("app")
 
-    lazy var playChainURL = PlayApp.playChainDirectory.appendingPathComponent(info.bundleIdentifier)
+    lazy var playChainURL = KeyCover.playChainPath.appendingPathComponent(info.bundleIdentifier)
 
     lazy var settings = AppSettings(info)
 
@@ -213,17 +213,18 @@ class PlayApp: BaseApp {
         }
     }
 
-    func introspection(set: Bool? = nil) -> Bool {
-        if info.lsEnvironment["DYLD_LIBRARY_PATH"] == nil {
-            info.lsEnvironment["DYLD_LIBRARY_PATH"] = ""
-        }
+    static let introspection: String = "/usr/lib/system/introspection"
+    static let iosFrameworks: String = "/System/iOSSupport/System/Library/Frameworks"
+
+    func changeDyldLibraryPath(set: Bool? = nil, path: String) async -> Bool {
+        info.lsEnvironment["DYLD_LIBRARY_PATH"] = info.lsEnvironment["DYLD_LIBRARY_PATH"] ?? ""
 
         if let set = set {
             if set {
-                info.lsEnvironment["DYLD_LIBRARY_PATH"]? += "/usr/lib/system/introspection:"
+                info.lsEnvironment["DYLD_LIBRARY_PATH"]? += "\(path):"
             } else {
                 info.lsEnvironment["DYLD_LIBRARY_PATH"] = info.lsEnvironment["DYLD_LIBRARY_PATH"]?
-                    .replacingOccurrences(of: "/usr/lib/system/introspection:", with: "")
+                    .replacingOccurrences(of: "\(path):", with: "")
             }
 
             do {
@@ -233,19 +234,19 @@ class PlayApp: BaseApp {
             }
         }
 
-        guard let introspection = info.lsEnvironment["DYLD_LIBRARY_PATH"] else {
+        guard let result = info.lsEnvironment["DYLD_LIBRARY_PATH"] else {
             return false
         }
 
-        return introspection.contains("/usr/lib/system/introspection")
+        return result.contains(path)
     }
 
     func hasAlias() -> Bool {
         return FileManager.default.fileExists(atPath: aliasURL.path)
     }
 
-    func isCodesigned() throws -> Bool {
-        try Shell.run("/usr/bin/codesign", "-dv", executable.path).contains("adhoc")
+    func isInfoPlistSigned() throws -> Bool {
+        try Shell.run("/usr/bin/codesign", "-dv", executable.path).contains("Info.plist entries")
     }
 
     func showInFinder() {
@@ -256,13 +257,14 @@ class PlayApp: BaseApp {
         container.containerUrl.showInFinderAndSelectLastComponent()
     }
 
-    func clearAllCache() {
+    func clearAllCache() async {
         Uninstaller.clearExternalCache(info.bundleIdentifier)
     }
 
     func clearPlayChain() {
         FileManager.default.delete(at: playChainURL)
         FileManager.default.delete(at: playChainURL.appendingPathExtension("keyCover"))
+        FileManager.default.delete(at: playChainURL.appendingPathExtension("db"))
     }
 
     func deleteApp() {
@@ -300,11 +302,13 @@ class PlayApp: BaseApp {
         "com.tencent.tmgp.cod",
         "com.tencent.ig",
         "com.pubg.newstate",
+        "com.pubg.imobile",
         "com.tencent.tmgp.pubgmhd",
         "com.dts.freefireth",
         "com.dts.freefiremax",
         "vn.vng.codmvn",
-        "com.ngame.allstar.eu"
+        "com.ngame.allstar.eu",
+        "com.axlebolt.standoff2"
     ]
 
     static let MALICIOUS_APPS = [
